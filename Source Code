@@ -1,0 +1,129 @@
+class X86CodeGenerator:
+    def __init__(self):
+        self.code = []
+        self.data_section = []
+        self.label_count = 0
+        self.var_offset = {}
+        self.current_offset = 0
+        self.string_constants = {}
+        self.next_string_id = 0
+    
+    def generate(self, tac):
+        self._generate_data_section(tac)
+        self._generate_text_section(tac)
+        return '\n'.join(self.data_section + [''] + self.code)
+    
+    def _generate_data_section(self, tac):
+        # Collect string constants
+        for instr in tac:
+            if instr[0] == 'print' and instr[1].startswith('"'):
+                str_id = f"str_{self.next_string_id}"
+                self.next_string_id += 1
+                self.string_constants[instr[1]] = str_id
+                self.data_section.append(f"{str_id}: db {instr[1]}, 0")
+        
+        # Add variable declarations
+        for var, offset in self.var_offset.items():
+            self.data_section.append(f"{var}: resd 1")  # reserve 4 bytes
+    
+    def _generate_text_section(self, tac):
+        self.code.extend([
+            "section .text",
+            "global _start",
+            "_start:",
+            "call main",
+            "mov eax, 1",      # sys_exit
+            "mov ebx, 0",       # exit code
+            "int 0x80"
+        ])
+        
+        current_func = None
+        
+        for instr in tac:
+            op, arg1, arg2, res = instr
+            
+            if op == 'func_begin':
+                current_func = res
+                self.code.append(f"{res}:")
+                self.code.append("push ebp")
+                self.code.append("mov ebp, esp")
+                self.current_offset = -4  # Start allocating space for locals
+            
+            elif op == 'func_end':
+                self.code.append("mov esp, ebp")
+                self.code.append("pop ebp")
+                self.code.append("ret")
+                current_func = None
+            
+            elif op == '=':
+                if arg1.isdigit():
+                    self.code.append(f"mov dword [{res}], {arg1}")
+                else:
+                    self.code.append(f"mov eax, dword [{arg1}]")
+                    self.code.append(f"mov dword [{res}], eax")
+            
+            elif op in ('+', '-', '*', '/'):
+                self._generate_binary_op(op, arg1, arg2, res)
+            
+            elif op == 'if_false':
+                self.code.append(f"cmp dword [{arg1}], 0")
+                self.code.append(f"je {res}")
+            
+            elif op == 'goto':
+                self.code.append(f"jmp {res}")
+            
+            elif op == 'label':
+                self.code.append(f"{res}:")
+            
+            elif op == 'print':
+                str_id = self.string_constants.get(arg1, None)
+                if str_id:
+                    self.code.append(f"push dword {str_id}")
+                    self.code.append("call printf")
+                    self.code.append("add esp, 4")
+            
+            elif op == 'print_arg':
+                if arg1.isdigit():
+                    self.code.append(f"push dword {arg1}")
+                else:
+                    self.code.append(f"push dword [{arg1}]")
+            
+            elif op == 'return':
+                if arg1:
+                    if arg1.isdigit():
+                        self.code.append(f"mov eax, {arg1}")
+                    else:
+                        self.code.append(f"mov eax, dword [{arg1}]")
+                self.code.append("ret")
+            
+            elif op == 'call':
+                self.code.append(f"call {arg1}")
+                if res:
+                    self.code.append(f"mov dword [{res}], eax")
+    
+    def _generate_binary_op(self, op, arg1, arg2, res):
+        # Load first operand
+        if arg1.isdigit():
+            self.code.append(f"mov eax, {arg1}")
+        else:
+            self.code.append(f"mov eax, dword [{arg1}]")
+        
+        # Load second operand
+        if arg2.isdigit():
+            self.code.append(f"mov ebx, {arg2}")
+        else:
+            self.code.append(f"mov ebx, dword [{arg2}]")
+        
+        # Perform operation
+        if op == '+':
+            self.code.append("add eax, ebx")
+        elif op == '-':
+            self.code.append("sub eax, ebx")
+        elif op == '*':
+            self.code.append("imul eax, ebx")
+        elif op == '/':
+            self.code.append("cdq")  # sign extend eax to edx:eax
+            self.code.append("idiv ebx")
+        
+        # Store result
+        self.code.append(f"mov dword [{res}], eax")
