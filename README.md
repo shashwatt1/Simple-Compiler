@@ -1,55 +1,78 @@
-My Compiler Project: A Journey Through Compilation
-This project is my attempt at deconstructing everything I've learned about Compiler Design. I wanted to build a compiler from the ground up, implementing each of the core stages to solidify my understanding of how source code is transformed into executable machine code.
+# Deconstructed Compiler ⚙️
 
-This compiler takes a simple, C-like language and translates it into x86 assembly code.
+This project is a personal exploration and a practical application of the concepts learned in a Compiler Design course. I thought of deconstructing the entire compilation process to better understand its inner workings. This compiler takes a simple, custom high-level language and compiles it down to **x86 assembly code**.
 
-The Six Phases of Compilation
-This project is structured to reflect the six classical phases of a compiler.
+The project implements all **six logical phases** of a compiler, providing a complete pipeline from source code to executable.
 
-1. Lexical Analysis (Scanning)
-The first phase scans the raw source code and groups sequences of characters into meaningful units called tokens. For example, the code x = 10; would be broken down into tokens like IDENTIFIER(x), EQUALS, INTEGER(10), and SEMICOLON.
+-----
 
-2. Syntax Analysis (Parsing)
-The parser takes the stream of tokens from the lexer and verifies that it conforms to the grammatical rules of the source language. It constructs a Parse Tree or an Abstract Syntax Tree (AST), which represents the syntactic structure of the code. This ensures that expressions and statements are correctly formed.
+## The Six Phases of Compilation
 
-3. Semantic Analysis
-This phase checks the AST for semantic consistency. It performs tasks like type checking (e.g., ensuring you don't add a string to an integer), verifying that variables are declared before they are used, and matching function arguments. The output is an annotated AST.
+The compiler is structured around the classic six-phase model, ensuring a modular and logical design.
 
-4. Intermediate Code Generation
-After semantic analysis, the compiler generates a machine-independent intermediate representation of the source code. This project uses Three-Address Code (TAC), which is a sequence of simple instructions like t1 = a + b. This intermediate form makes the subsequent optimization phase easier to implement.
+1.  **Lexical Analysis (Scanning):** The first phase reads the raw source code and converts the stream of characters into a sequence of **tokens**. Each token represents a fundamental building block of the language, like keywords (`if`, `func`), identifiers (`myVar`), operators (`+`, `=`), and literals (`123`, `"hello"`).
 
-5. Code Optimization
-This is an optional but crucial phase where the intermediate code is analyzed and transformed to produce more efficient code. This can include techniques like constant folding, dead code elimination, and strength reduction. The goal is to improve the performance of the final output without changing its meaning.
+2.  **Syntax Analysis (Parsing):** The parser takes the list of tokens from the lexer and verifies that the sequence conforms to the grammatical rules of the language. It constructs an **Abstract Syntax Tree (AST)**, a hierarchical representation of the source code's structure.
 
-6. Code Generation
-The final phase takes the (optimized) intermediate code and maps it to the target machine's instruction set. This project's X86CodeGenerator class, as shown in the provided snippet, translates the Three-Address Code into x86 assembly language, handling things like register allocation, memory management, and function call conventions.
+3.  **Semantic Analysis:** This phase traverses the AST to check for semantic correctness—rules that are difficult to check with grammar alone. This includes type checking, verifying variable declarations, and matching function arguments.
 
-How to Use
-Clone the repository:
+4.  **Intermediate Code Generation:** After the AST is validated, it's translated into a machine-independent intermediate representation (IR). This project uses **Three-Address Code (TAC)**, where each instruction has at most three operands (e.g., `result = op1 + op2`).
 
-git clone [your-repo-url]
+5.  **Code Optimization:** This phase analyzes the IR to produce more efficient code. While not the primary focus, simple optimizations like constant folding could be implemented here to improve performance.
 
-Run the compiler:
+6.  **Code Generation:** The final phase translates the intermediate code into the target machine's assembly language. This project's code generator, `X86CodeGenerator`, converts the TAC into **32-bit x86 assembly** compatible with the NASM assembler.
 
-python compiler.py your_source_file.lang
+-----
 
-Assemble and link the output (using NASM and ld):
+## Focus: The x86 Code Generator
 
-nasm -f elf32 output.asm -o output.o
-ld -m elf_i386 output.o -o executable
+The `X86CodeGenerator` class is the heart of the final compilation phase. It takes the list of Three-Address Code instructions and systematically converts them into x86 assembly for Linux.
 
-Run your program:
+### How It Works
 
-./executable
+The generator processes each TAC instruction and maps it to a sequence of x86 instructions.
 
-Example
-Here is a small example of the source language:
+  * **Function Prologue/Epilogue:** For `func_begin` and `func_end`, it generates the standard stack frame setup (`push ebp; mov ebp, esp`) and teardown code.
+  * **Arithmetic Operations:** For an operation like `t1 = a + b`, it uses registers (`eax`, `ebx`) to load the operands, performs the operation (`add eax, ebx`), and stores the result back into memory (`mov dword [t1], eax`).
+  * **Assignments:** Handles both immediate values (`mov dword [x], 10`) and variable-to-variable assignments (`mov eax, dword [y]; mov dword [x], eax`).
+  * **Control Flow:** Translates `if_false`, `goto`, and `label` TAC instructions into conditional jumps (`je`), unconditional jumps (`jmp`), and assembly labels.
+  * **System Calls:** Sets up the necessary registers to handle program exit and printing to the console via Linux system calls or by calling C library functions like `printf`.
 
-function main() {
-  int a = 10;
-  int b = 20;
-  int c = a + b;
-  print(c);
-}
+The output is a complete `.asm` file with `.data` and `.text` sections, ready for assembly and linking.
 
-This would be compiled into an output.asm file ready for assembly.
+-----
+
+## How to Run
+
+To compile and run a program using this compiler, you'll need **Python**, **NASM**, and a **32-bit linker** (like `ld`).
+
+1.  **Generate Assembly Code**
+    Run the main compiler script with your source file.
+
+    ```bash
+    python compiler.py your_program.lang
+    ```
+
+    This will produce an assembly file, e.g., `output.asm`.
+
+2.  **Assemble the Code (using NASM)**
+    Use NASM to convert the assembly file into a 32-bit ELF object file.
+
+    ```bash
+    nasm -f elf32 output.asm -o output.o
+    ```
+
+3.  **Link the Object File (using ld)**
+    Link the object file to create the final executable.
+
+    ```bash
+    ld -m elf_i386 output.o -o my_executable
+    ```
+
+    *(Note: If using `printf`, you may need to link against the C standard library.)*
+
+4.  **Run the Executable**
+
+    ```bash
+    ./my_executable
+    ```
